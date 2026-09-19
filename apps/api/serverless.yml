@@ -1,0 +1,105 @@
+service: aisha-portfolio-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  environment:
+    DYNAMODB_TABLE_PROJECTS: ${self:service}-projects-${self:provider.stage}
+    DYNAMODB_TABLE_BLOG: ${self:service}-blog-${self:provider.stage}
+    SES_SENDER_EMAIL: aishakhalfan45@gmail.com
+    JWT_SECRET: ${env:JWT_SECRET, 'aisha-portfolio-jwt-secret-key-2024'}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE_PROJECTS}"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+          Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE_BLOG}"
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+
+functions:
+  getProjects:
+    handler: functions/projects/getProjects.handler
+    events:
+      - httpApi:
+          path: /projects
+          method: get
+
+  createProject:
+    handler: functions/projects/createProject.handler
+    events:
+      - httpApi:
+          path: /projects
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+
+  getBlogPosts:
+    handler: functions/blog/getBlogPosts.handler
+    events:
+      - httpApi:
+          path: /blog
+          method: get
+
+  sendContactEmail:
+    handler: functions/contact/sendContactEmail.handler
+    events:
+      - httpApi:
+          path: /contact
+          method: post
+
+  loginAdmin:
+    handler: functions/auth/login.handler
+    events:
+      - httpApi:
+          path: /auth/login
+          method: post
+
+resources:
+  Resources:
+    ProjectsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_PROJECTS}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST # Stays comfortably inside 25 WCU / 25 RCU Always-Free tier
+
+    BlogTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_BLOG}
+        AttributeDefinitions:
+          - AttributeName: slug
+            AttributeType: S
+        KeySchema:
+          - AttributeName: slug
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+plugins:
+  - serverless-offline
